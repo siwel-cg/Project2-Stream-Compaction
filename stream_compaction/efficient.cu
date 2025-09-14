@@ -20,11 +20,24 @@ namespace StreamCompaction {
             if (index + offDown1 >= N) {
                 return;
             }
-            if (index + offDown1 == 6) {
-                printf("Huh?:Old %d, New %d ", iData[index + offDown1], iData[index] + iData[index + offDown1]);
-            }
-
             iData[index + offDown1] = iData[index] + iData[index + offDown1];
+
+        }
+
+        __global__ void downSweep(int N, int offset, int* iData) {
+            int offDown1 = offset >> 1;
+            int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+            index *= offset;
+            index += offDown1 - 1;
+            if (index + offDown1 >= N) {
+                return;
+            }
+            //printf("index = %d, offDown1 = %d, value = %d \n", index, offDown1, iData[index] + iData[index + offDown1]);
+            //printf(" |index left: %d, value left: %d, index right: %d, value right: %d, new value = %d | \n", index, iData[index], index + offDown1, iData[index + offDown1], iData[index] + iData[index + offDown1]);
+            int temp = iData[index + offDown1];
+            iData[index + offDown1] = iData[index] + iData[index + offDown1];
+            iData[index] = temp;
         }
 
         /**
@@ -32,7 +45,6 @@ namespace StreamCompaction {
          */
         void scan(int n, int *odata, const int *idata) {
             timer().startGpuTimer();
-            
             int* dev_idata;
             int pow2N = ilog2ceil(n);
             int size = 1 << pow2N;
@@ -57,13 +69,23 @@ namespace StreamCompaction {
                 upSweep << <gridSize, blockSize >> > (size, offset, dev_idata);
             }
 
-            
+            cudaMemset(dev_idata + size - 1, 0, sizeof(int));
+
+            for (int d = 0; d < pow2N; d++) { 
+                downSweep << <gridSize, blockSize >> > (size, offset, dev_idata);
+                offset = offset >> 1;
+            }
+
             cudaMemcpy(odata, dev_idata, size * sizeof(int), cudaMemcpyDeviceToHost);
 
-            for (int i = 0; i < size; i++) {
-                printf("out[%d] = %d : ", i, odata[i]);
+            for (int i = 1; i < size; i++) {
+                odata[i - 1] = odata[i];
             }
-            printf("\n");
+
+            //for (int i = 0; i < size; i++) {
+            //    printf("out[%d] = %d : ", i, odata[i]);
+            //}
+            //printf("\n");
 
             cudaFree(dev_idata);
             timer().endGpuTimer();
