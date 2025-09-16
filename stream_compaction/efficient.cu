@@ -82,11 +82,6 @@ namespace StreamCompaction {
                 odata[i - 1] = odata[i];
             }
 
-            //for (int i = 0; i < size; i++) {
-            //    printf("out[%d] = %d : ", i, odata[i]);
-            //}
-            //printf("\n");
-
             cudaFree(dev_idata);
             timer().endGpuTimer();
         }
@@ -103,8 +98,64 @@ namespace StreamCompaction {
         int compact(int n, int *odata, const int *idata) {
             timer().startGpuTimer();
             // TODO
+            int* dev_idata;
+            cudaMalloc((void**)&dev_idata, n * sizeof(int));
+            cudaMemcpy(dev_idata, idata, n * sizeof(int), cudaMemcpyHostToDevice);
+
+            int* dev_bool;
+            int* host_bool = new int[n];
+            int* host_scanResult = new int[n];
+            int* dev_indices;
+            int* dev_scatter;
+
+            cudaMalloc((void**)&dev_bool, n * sizeof(int));
+            cudaMalloc((void**)&dev_indices, n * sizeof(int));
+            cudaMalloc((void**)&dev_scatter, n * sizeof(int));
+
+            int blockSize = 64;
+            int gridSize = (n + blockSize - 1) / blockSize;
+
+            Common::kernMapToBoolean << <gridSize, blockSize >> > (n, dev_bool, dev_idata);
+            cudaMemcpy(host_bool, dev_bool, n * sizeof(int), cudaMemcpyDeviceToHost);
             timer().endGpuTimer();
-            return -1;
+            scan(n, host_scanResult, host_bool);
+            timer().startGpuTimer();
+
+            cudaMemcpy(dev_indices, host_scanResult, n * sizeof(int), cudaMemcpyHostToDevice);
+
+            Common::kernScatter << <gridSize, blockSize >> > (n, dev_scatter, dev_idata, dev_bool, dev_indices);
+
+            //for (int i = 0; i < n; i++) {
+            //    printf("bool[%d] = %d : ", i, host_bool[i]);
+            //}
+            //printf("\n");
+
+            //for (int i = 0; i < n; i++) {
+            //   printf("scan[%d] = %d : ", i, host_scanResult[i]);
+            //}
+            //printf("\n");
+
+            cudaMemcpy(odata, dev_scatter, n * sizeof(int), cudaMemcpyDeviceToHost);
+
+            //for (int i = 0; i < n; i++) {
+            //    printf("result[%d] = %d : ", i, odata[i]);
+            //}
+            //printf("\n");
+
+            int returnNum = n;
+            for (int i = 0; i < n-1; i++) {
+                if (odata[i + 1] == 0) {
+                    returnNum = i + 1;
+                    break;
+                }
+            }
+
+            cudaFree(dev_idata);
+            cudaFree(dev_bool);
+            cudaFree(dev_scatter);
+
+            timer().endGpuTimer();
+            return returnNum;
         }
     }
 }
