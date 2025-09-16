@@ -62,7 +62,6 @@ namespace StreamCompaction {
                 npow2 = 1 << d;
                 kernScanNaive << < gridSize, blockSize >> > (size, npow2, dev_idata2, dev_idata1);
                 std::swap(dev_idata2, dev_idata1);
-
             }
 
             cudaMemcpy(odata, dev_idata1, size * sizeof(int), cudaMemcpyDeviceToHost);
