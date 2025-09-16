@@ -20,13 +20,14 @@ This was implemented as a simple for loop which takes the first element
 Naive Parallel Scan
 If we expand out each sum in our sequenctial sum, we see that we can break down that entire sum into pairs of sums, then one again pairs of sums those, and so on untill finally we have just one value left. The result looks like a binary tree where at each level we do half the number of adds of the previous level. Note also that at each level, we have actually already completed a sum for some of the outputs. The advantage of doing things this way is that each individual sum in a layer doesn't rely on the others, and can thus be computed in parallel. 
 
-![naiveScan](images/NaiveScan_V1.png)
+![Naive Scan](img/NaiveScan_V1.png)
 
 Work-Efficient Parallel Scan
 
 
-![upSweep](images/UpSweep_V1.png)
-![downSweep](images/downSweep_V1.png)
+![Up Sweep](img/UpSweep_V1.png)
+
+![Down Sweep](img/DownSweep_V1.png)
 
 ### Stream Compaction
 
