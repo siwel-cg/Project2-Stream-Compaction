@@ -86,6 +86,13 @@ namespace StreamCompaction {
             timer().endGpuTimer();
         }
 
+        __global__ void kernResetIntBuffer(int N, int* intBuffer, int value) {
+            int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+            if (index < N) {
+                intBuffer[index] = value;
+            }
+        }
+
         /**
          * Performs stream compaction on idata, storing the result into odata.
          * All zeroes are discarded.
@@ -97,7 +104,19 @@ namespace StreamCompaction {
          */
         int compact(int n, int *odata, const int *idata) {
             timer().startGpuTimer();
-            // TODO
+            printf("n = %d", n);
+            int pow2N = ilog2ceil(n);
+            int size = 1 << pow2N;
+            int* padded = new int[size];
+            for (int i = 0; i < size; i++) {
+                if (i >= n) {
+                    padded[i] = 0;
+                }
+                else {
+                    padded[i] = idata[i];
+                }
+            }
+
             int* dev_idata;
             cudaMalloc((void**)&dev_idata, n * sizeof(int));
             cudaMemcpy(dev_idata, idata, n * sizeof(int), cudaMemcpyHostToDevice);
@@ -122,33 +141,28 @@ namespace StreamCompaction {
             timer().startGpuTimer();
 
             cudaMemcpy(dev_indices, host_scanResult, n * sizeof(int), cudaMemcpyHostToDevice);
-
+            kernResetIntBuffer << <gridSize, blockSize >> > (n, dev_scatter, 0);
             Common::kernScatter << <gridSize, blockSize >> > (n, dev_scatter, dev_idata, dev_bool, dev_indices);
 
-            //for (int i = 0; i < n; i++) {
-            //    printf("bool[%d] = %d : ", i, host_bool[i]);
-            //}
-            //printf("\n");
-
-            //for (int i = 0; i < n; i++) {
-            //   printf("scan[%d] = %d : ", i, host_scanResult[i]);
-            //}
-            //printf("\n");
+            for (int i = 0; i < n; i++) {
+                printf("bool[%d] = %d : ", i, host_bool[i]);
+            }
+            printf("\n");
+            
+            for (int i = 0; i < n; i++) {
+               printf("scan[%d] = %d : ", i, host_scanResult[i]);
+            }
+            printf("\n");
 
             cudaMemcpy(odata, dev_scatter, n * sizeof(int), cudaMemcpyDeviceToHost);
-
-            //for (int i = 0; i < n; i++) {
-            //    printf("result[%d] = %d : ", i, odata[i]);
-            //}
-            //printf("\n");
-
-            int returnNum = n;
-            for (int i = 0; i < n-1; i++) {
-                if (odata[i + 1] == 0) {
-                    returnNum = i + 1;
-                    break;
-                }
+            int returnNum = 0;
+            for (int i = 0; i < n; i++) {
+                printf("result[%d] = %d : ", i, odata[i]);
+                if (odata[i] == 0) { break; }
+                returnNum++;
             }
+            printf("\n");
+
 
             cudaFree(dev_idata);
             cudaFree(dev_bool);
