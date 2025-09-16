@@ -16,11 +16,11 @@ The Scan problem is simply: given an array of elements and some binarry operatio
 
 \underline{CPU Scan}
 
-This was implemented as a simple for loop which takes the first element
+This was implemented as a simple for loop which adds the current element with the result of the previous iteration and thus perfoms the prefix sum. As expected, we have n-1 adds with a total asymtotic runtime of O(n). Very strait forward, but critically, this is a sequencial operation with no parallelization. Although, for relatively small inputs this is significantly faster than the more complex GPU algorithms we implement, as our input grows this becomes much slower. 
 
 \underline{Naive Parallel Scan}
 
-If we expand out each sum in our sequenctial sum, we see that we can break down that entire sum into pairs of sums, then one again pairs of sums those, and so on untill finally we have just one value left. The result looks like a binary tree where at each level we do half the number of adds of the previous level. Note also that at each level, we have actually already completed a sum for some of the outputs. The advantage of doing things this way is that each individual sum in a layer doesn't rely on the others, and can thus be computed in parallel. In my implementation, since we are reading and writing to the same array, I used a ping-pong array system for the output to avoid any incorrect adds. Overall, we get O(nlog_2(n)) adds and O(log_2(n)) 
+If we expand out each sum in our sequenctial sum, we see that we can break down that entire thing into independent pairs of sums. Then, once again, we can break those down into pairs of sums, and so on untill finally we have just one value left. The result looks like a binary tree where at each level we do half the number of adds of the previous level. Note also that at each level, we have actually already completed a sum for some of the outputs. The advantage of doing things this way is that each individual sum in a layer doesn't rely on the others, and can thus be computed in parallel. In my implementation, since we are reading and writing to the same array, I used a ping-pong array system for the output to avoid any incorrect adds. Overall, we get $O(nlog_2(n))$ adds with an asymtotic time of $O(log_2(n))$. Note, although we are doing many more adds, since they can be done in parallel, they can be completed faster 
 
 ![Naive Scan](img/NaiveScan_V1.png)
 
@@ -32,6 +32,11 @@ Although it might not be obvious at first we can actually cut out some of the ad
 ![Down Sweep](img/DownSweep_V1.png)
 
 ### Stream Compaction
+The second part of this project implemented stream compaction of the input array by removing unwanted elements, which in this case was removing all 0 elements from our array of ints. Again, a sequencial algorithm seems obvious and possibly neessary. However, using this scan function we can parallelize how we find the end indices for each non-zero element as well as how we place those into our output array. Again, for comparisson, I implemented both a basic CPU version and this parallelized version.
+
+\underline{CPU Stream Compaction}
+
+\underline{GPU Stream Compaction}
 
 ### A Quick Note On Groups
 As mentioned earlier, with the Scan algorithm, and thus Stream Compaction aswell, we are simply given an array of elements and some operation that can be used on those elements. If we look further into the algorithm however, we see that two more conditions need to be met: our operation must be associative and there must be an identity element. This is precicely the axioms needed for a group! Although in practice we would need to do a bit more work and memory managment if our group element isn't a simple number that can be stored in an array, the algorithm will still work as expected. There is just one other thing we need to be careful of when implementing Down Sweep in the Work Efficient Scan: Commutativity. For many groups, including our intager addition we implemented, our group is abelian, which means A+B = B+A as you would expect. However this is not the case for all groups. For example, matrix multiplications is not-commutative and thus we need to be extra cearful when multiplying to ensure we maintain the ordering of or initial array. As presented in the pictures above, when doing the swap/combine step of two elements, doing Left * Right will actually break the order of our input array. However, if we do Right * Left at each step, we see the ordering gets maintained, meaning that we can still use these efficient methods for non-abelian groups. 
