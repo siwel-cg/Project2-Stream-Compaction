@@ -48,13 +48,10 @@ namespace StreamCompaction {
             if (index >= n) {
                 return;
             }
-            //odata[indices[index]] = idata[index] * bools[index];
             if (bools[index] == 1) {
                 odata[indices[index]] = idata[index];
             }
-            /*else {
-                odata[index] = 0;
-            }*/
+
         }
 
     }

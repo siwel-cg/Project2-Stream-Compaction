@@ -104,7 +104,6 @@ namespace StreamCompaction {
          */
         int compact(int n, int *odata, const int *idata) {
             timer().startGpuTimer();
-            printf("n = %d", n);
             int pow2N = ilog2ceil(n);
             int size = 1 << pow2N;
             int* padded = new int[size];
@@ -144,25 +143,12 @@ namespace StreamCompaction {
             kernResetIntBuffer << <gridSize, blockSize >> > (n, dev_scatter, 0);
             Common::kernScatter << <gridSize, blockSize >> > (n, dev_scatter, dev_idata, dev_bool, dev_indices);
 
-            for (int i = 0; i < n; i++) {
-                printf("bool[%d] = %d : ", i, host_bool[i]);
-            }
-            printf("\n");
-            
-            for (int i = 0; i < n; i++) {
-               printf("scan[%d] = %d : ", i, host_scanResult[i]);
-            }
-            printf("\n");
-
             cudaMemcpy(odata, dev_scatter, n * sizeof(int), cudaMemcpyDeviceToHost);
             int returnNum = 0;
             for (int i = 0; i < n; i++) {
-                printf("result[%d] = %d : ", i, odata[i]);
                 if (odata[i] == 0) { break; }
                 returnNum++;
             }
-            printf("\n");
-
 
             cudaFree(dev_idata);
             cudaFree(dev_bool);
