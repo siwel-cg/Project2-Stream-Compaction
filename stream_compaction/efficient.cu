@@ -13,38 +13,34 @@ namespace StreamCompaction {
         }
 
         __global__ void upSweep(int N, int offset, int* iData) {
-            int offDown1 = offset >> 1;
             int index = blockIdx.x * blockDim.x + threadIdx.x;
-            index *= offset;
-            index += offDown1 - 1;
-            if (index + offDown1 >= N) {
+            if (index >= N / offset) {
                 return;
             }
-            iData[index + offDown1] = iData[index] + iData[index + offDown1];
-
+            int offDown1 = offset >> 1;
+            int idxOffset = (index + 1) * offset - 1;
+            iData[idxOffset] += iData[idxOffset - offDown1];
         }
 
         __global__ void downSweep(int N, int offset, int* iData) {
-            int offDown1 = offset >> 1;
             int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-            index *= offset;
-            index += offDown1 - 1;
-            if (index + offDown1 >= N) {
+            if (index >= N / offset) {
                 return;
             }
-            //printf("index = %d, offDown1 = %d, value = %d \n", index, offDown1, iData[index] + iData[index + offDown1]);
-            //printf(" |index left: %d, value left: %d, index right: %d, value right: %d, new value = %d | \n", index, iData[index], index + offDown1, iData[index + offDown1], iData[index] + iData[index + offDown1]);
-            int temp = iData[index + offDown1];
-            iData[index + offDown1] = iData[index] + iData[index + offDown1];
-            iData[index] = temp;
+
+            int offDown1 = offset >> 1;
+            int idxOffset = (index + 1) * offset - 1;
+
+            int temp = iData[idxOffset - offDown1];
+            iData[idxOffset - offDown1] = iData[idxOffset];
+            iData[idxOffset] += temp;
         }
 
         /**
          * Performs prefix-sum (aka scan) on idata, storing the result into odata.
          */
         void scan(int n, int *odata, const int *idata) {
-            timer().startGpuTimer();
+           
             int* dev_idata;
             int pow2N = ilog2ceil(n);
             int size = 1 << pow2N;
@@ -61,20 +57,26 @@ namespace StreamCompaction {
             cudaMalloc((void**)&dev_idata, size * sizeof(int));
             cudaMemcpy(dev_idata, padded, size * sizeof(int), cudaMemcpyHostToDevice);
 
-            int blockSize = 64;
+            timer().startGpuTimer();
+            int blockSize = 128;
             int gridSize = (size + blockSize - 1) / blockSize;
             int offset = 2;
-            for (int d = 0; d < pow2N; d++) {
-                offset = 1 << d + 1;
+
+            for (int offset = 2; offset <= size; offset <<= 1) {
+                int active = size / offset;
+                int gridSize = (active + blockSize - 1) / blockSize;
                 upSweep << <gridSize, blockSize >> > (size, offset, dev_idata);
             }
 
             cudaMemset(dev_idata + size - 1, 0, sizeof(int));
 
-            for (int d = 0; d < pow2N; d++) { 
+            for (int offset = size; offset >= 2; offset >>= 1) {
+                int active = size / offset;
+                int gridSize = (active + blockSize - 1) / blockSize;
                 downSweep << <gridSize, blockSize >> > (size, offset, dev_idata);
-                offset = offset >> 1;
             }
+
+            timer().endGpuTimer();
 
             cudaMemcpy(odata, dev_idata, size * sizeof(int), cudaMemcpyDeviceToHost);
 
@@ -83,7 +85,6 @@ namespace StreamCompaction {
             }
 
             cudaFree(dev_idata);
-            timer().endGpuTimer();
         }
 
         __global__ void kernResetIntBuffer(int N, int* intBuffer, int value) {
@@ -103,7 +104,7 @@ namespace StreamCompaction {
          * @returns      The number of elements remaining after compaction.
          */
         int compact(int n, int *odata, const int *idata) {
-            timer().startGpuTimer();
+            
             int pow2N = ilog2ceil(n);
             int size = 1 << pow2N;
             int* padded = new int[size];
@@ -130,18 +131,25 @@ namespace StreamCompaction {
             cudaMalloc((void**)&dev_indices, n * sizeof(int));
             cudaMalloc((void**)&dev_scatter, n * sizeof(int));
 
-            int blockSize = 64;
-            int gridSize = (n + blockSize - 1) / blockSize;
-
-            Common::kernMapToBoolean << <gridSize, blockSize >> > (n, dev_bool, dev_idata);
-            cudaMemcpy(host_bool, dev_bool, n * sizeof(int), cudaMemcpyDeviceToHost);
-            timer().endGpuTimer();
-            scan(n, host_scanResult, host_bool);
             timer().startGpuTimer();
 
+            int blockSize = 64;
+            int gridSize = (n + blockSize - 1) / blockSize;
+            
+            Common::kernMapToBoolean << <gridSize, blockSize >> > (n, dev_bool, dev_idata);
+
+            timer().endGpuTimer();
+
+            cudaMemcpy(host_bool, dev_bool, n * sizeof(int), cudaMemcpyDeviceToHost);
+            scan(n, host_scanResult, host_bool);
             cudaMemcpy(dev_indices, host_scanResult, n * sizeof(int), cudaMemcpyHostToDevice);
+
+            timer().startGpuTimer();
+
             kernResetIntBuffer << <gridSize, blockSize >> > (n, dev_scatter, 0);
             Common::kernScatter << <gridSize, blockSize >> > (n, dev_scatter, dev_idata, dev_bool, dev_indices);
+
+            timer().endGpuTimer();
 
             cudaMemcpy(odata, dev_scatter, n * sizeof(int), cudaMemcpyDeviceToHost);
             int returnNum = 0;
@@ -154,7 +162,6 @@ namespace StreamCompaction {
             cudaFree(dev_bool);
             cudaFree(dev_scatter);
 
-            timer().endGpuTimer();
             return returnNum;
         }
     }
