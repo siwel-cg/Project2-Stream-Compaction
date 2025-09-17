@@ -11,6 +11,7 @@ CUDA Stream Compaction
 
 ## Overview
 Often when thinking about parallelization, we think of use cases that are already inherintly parallel by nature in that each calculation doesn't really depend on eachother. Things like running a series calculations on every particle or each pixel of the screen. With these, we can ofcourse assign each element to a thread, and do the calculations all at once. However, what about problems which seem be purely sequenctial? In this project, I implement two such problems, scan and stream compaction, which take advantage of GPU parallelization to reduce the total number of operations performed. A naive CPU version was also implemneted for comparisson.
+
 ### Scan
 The Scan problem is simply: given an array of elements and some binarry operation which can combine two elements, we want to return the "sum" of any element with all the elements before it. In this implementation we we looking at specifically summing an array of integers, however any group can work (see later note on groups). There are two different types of the scan algorithm: Exclusive Scan and Inclusive Scan. In an Exclusive Scan, index i in our result array will contain the sum of all elements with idices stricly less than i. That is, the ith element in our input will not be included in the sum stored in the ith element of our output. This means our first output element will always be 0 and the last element in our input is never added and is irelivant to the output. For an Inclusive Scan, we do take into account the ith element in our sum. This means the first element of our output is always the first elment of our input, and the last element of our output is the sum of all elements in the array. In this project I implemented Exclusive Scans, but it is simple to convert between the two types deppending on the use case.
 
@@ -26,13 +27,15 @@ If we expand out each sum in our sequenctial sum, we see that we can break down 
 
 <ins>Work-Efficient Parallel Scan<ins>
 
-Although it might not be obvious at first we can actually cut out some of the addition operations as well as ordering our data in such a way that we don't need to ping-pong memory. The way we do this is through two passes on the array: Up Sweep nd Down Sweep. First is Up Sweep. Again, we take advantage of the associative property of our operation to split up add operations into a binary tree. However, rather than storing the sums into a new array, we store them back into the same array. Because of the ordering of the sums being completely disjoint, we don't run into the same problems as the naive implementation. The result of Up Sweep is not our completed scan, but it gets us half way in that we now have multiple sub sums we can reference in Down Sweep. In down sweep, we trace the tree down the opossite way. For the pairs in each level (Left and Right), we store Left+Right in Right's index and store Right in Left's index. By doing this down all the levels, we get a complete prefix sum array. It can be unintuative to see why this works, I would suggest looking at the pictures bellow and tracing out which indices and values go where. Once again, we need to pad our input array with identity elements if it is not a power of 2. 
+Although it might not be obvious at first we can actually cut out some of the addition operations as well as ordering our data in such a way that we don't need to ping-pong memory. The way we do this is through two passes on the array: Up Sweep nd Down Sweep. First is Up Sweep. Again, we take advantage of the associative property of our operation to split up add operations into a binary tree. However, rather than storing the sums into a new array, we store them back into the same array. Because of the ordering of the sums being completely disjoint, we don't run into the same problems as the naive implementation. The result of Up Sweep is not our completed scan, but it gets us half way in that we now have multiple sub sums we can reference in Down Sweep. In down sweep, we trace the tree down the opossite way. For the pairs in each level (Left and Right), we store Left+Right in Right's index and store Right in Left's index. By doing this down all the levels, we get a complete prefix sum array. It can be unintuative to see why this works, I would suggest looking at the pictures bellow and tracing out which indices and values go where. Once again, we need to pad our input array with identity elements if it is not a power of 2.
+
+One advantage of using this particular tree structure, which we can use to further improve run times, is that for smaller levels, we don't need as many blocks per threads. This is because alot of the threads we would run would end up being useless if we used all of the threads needed for the most dense layer. Thus we can shrink the grid size based on the layer we are in, thus resulting in fewer total threads an a faster run time without sacrificing any results. SPOILER ALLERT: this is also useful for the GPU stram compaction in the next section since it reuses this scan implementation.
 
 ![Up Sweep](img/UpSweeP_V1.png)
 
 ![Down Sweep](img/DownSweep_V1.png)
 
---
+---
 
 ### Stream Compaction
 The second part of this project implemented stream compaction of the input array by removing unwanted elements, which in this case was removing all 0 elements from our array of ints. Again, a sequencial algorithm seems obvious and possibly neessary. However, using this scan function we can parallelize how we find the end indices for each non-zero element as well as how we place those into our output array. Again, for comparisson, I implemented both a basic CPU version and this parallelized version.
@@ -49,7 +52,11 @@ To parallelize this task, let's first think about what information we need to fi
 
 ![GPU Stream Compaction](img/ParallelCompact_V1.png)
 
---
+### Thrust
+
+In addition to my custom implementations of these algorithms, I also used a third party library (Thrust) implementations for comparison.
+
+---
 
 ### A Quick Note On Groups
 As mentioned earlier, with the Scan algorithm, and thus Stream Compaction aswell, we are simply given an array of elements and some operation that can be used on those elements. If we look further into the algorithm however, we see that two more conditions need to be met: our operation must be associative and there must be an identity element. This is precicely the axioms needed for a group! Although in practice we would need to do a bit more work and memory managment if our group element isn't a simple number that can be stored in an array, the algorithm will still work as expected. There is just one other thing we need to be careful of when implementing Down Sweep in the Work Efficient Scan: Commutativity. For many groups, including our intager addition we implemented, our group is abelian, which means A+B = B+A as you would expect. However this is not the case for all groups. For example, matrix multiplications is not-commutative and thus we need to be extra cearful when multiplying to ensure we maintain the ordering of or initial array. As presented in the pictures above, when doing the swap/combine step of two elements, doing Left * Right will actually break the order of our input array. However, if we do Right * Left at each step, we see the ordering gets maintained, meaning that we can still use these efficient methods for non-abelian groups. 
@@ -60,7 +67,6 @@ As mentioned earlier, with the Scan algorithm, and thus Stream Compaction aswell
 Below are the run time results across a varying size of inputs. Note 2^16 = 65536, 2^18 = 262144, 2^20 = 1048576, 2^22 = 4194304, 2^24 = 16777216, and 2^26 = 67108864. The block size for each algorith are as follows:
 Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These ended up being the best after comparing result times across various different block sizes.
 
---
 ### Run Time Graphs and Data
 
 <ins>Non-Logarithmic Scale<ins>
@@ -81,8 +87,9 @@ Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These end
 
 ![Compact P2 Table](img/CompactRuntimeValues_V1.png)
 
---
 ### Program Output
+
+This was run on an input size of $2^24$ and a non-power of 2 input size of $2^24 - 7$
 
 ```
 ****************
@@ -139,10 +146,11 @@ Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These end
     passed
 
 ```
+---
 
 ## Performance Analysis
 
-As can be seen in the graphs, as the size of our input increases, the CPU algorithms increas linearly as expected. This is because they are performing the operations sequencially and thus are directly dependent on the input size. However, we see that our GPU implementations tend to follow a less steep increase overall. This is particularly noticable in the first graph without the logarithmic data scalling. 
+As can be seen in the graphs, as the size of our input increases, we see the GPU algorithms performing better than the CPU implementations. This is because the CPU implementations are performing the operations sequencially and thus are directly dependent on the input size. However, we see that our GPU implementations tend to follow a less steep increase overall due to the tree structures we use. This is particularly noticable in the first graph without the logarithmic data scalling. Of course, as I mentiond before, for input sizes roughly $<= 2^20$ we still see the CPU implementation performing better. This is due to fixed costs on the GPU. For samll input sizes, each kernel launch has some latency, which means for our scan/compaction algorithms where we do O(log n) kernel passes, we loose some time. Additionally, with to few elements, the GPU cannot fill enough warps to hide memory latency. Meanwhile, the CPU’s simple loop runs have enough cach space with very low latency to run efficiently. Beyond ~2^20 elements these fixed costs are amortized, the GPU has enough elements to shine in parallel, and the tree-based parallel scans/compaction become better than the CPU.
 
 ---
 ## References
