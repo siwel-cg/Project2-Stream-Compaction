@@ -32,6 +32,8 @@ Although it might not be obvious at first we can actually cut out some of the ad
 
 ![Down Sweep](img/DownSweep_V1.png)
 
+--
+
 ### Stream Compaction
 The second part of this project implemented stream compaction of the input array by removing unwanted elements, which in this case was removing all 0 elements from our array of ints. Again, a sequencial algorithm seems obvious and possibly neessary. However, using this scan function we can parallelize how we find the end indices for each non-zero element as well as how we place those into our output array. Again, for comparisson, I implemented both a basic CPU version and this parallelized version.
 
@@ -47,6 +49,8 @@ To parallelize this task, let's first think about what information we need to fi
 
 ![GPU Stream Compaction](img/ParallelCompact_V1.png)
 
+--
+
 ### A Quick Note On Groups
 As mentioned earlier, with the Scan algorithm, and thus Stream Compaction aswell, we are simply given an array of elements and some operation that can be used on those elements. If we look further into the algorithm however, we see that two more conditions need to be met: our operation must be associative and there must be an identity element. This is precicely the axioms needed for a group! Although in practice we would need to do a bit more work and memory managment if our group element isn't a simple number that can be stored in an array, the algorithm will still work as expected. There is just one other thing we need to be careful of when implementing Down Sweep in the Work Efficient Scan: Commutativity. For many groups, including our intager addition we implemented, our group is abelian, which means A+B = B+A as you would expect. However this is not the case for all groups. For example, matrix multiplications is not-commutative and thus we need to be extra cearful when multiplying to ensure we maintain the ordering of or initial array. As presented in the pictures above, when doing the swap/combine step of two elements, doing Left * Right will actually break the order of our input array. However, if we do Right * Left at each step, we see the ordering gets maintained, meaning that we can still use these efficient methods for non-abelian groups. 
 
@@ -54,9 +58,16 @@ As mentioned earlier, with the Scan algorithm, and thus Stream Compaction aswell
 ## Results
 
 Below are the run time results across a varying size of inputs. Note 2^16 = 65536, 2^18 = 262144, 2^20 = 1048576, 2^22 = 4194304, 2^24 = 16777216, and 2^26 = 67108864. The block size for each algorith are as follows:
-Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These ended up being the best after comparing result times across various different block sizes. Note, for the graphs a log scale was used for better visibility.
+Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These ended up being the best after comparing result times across various different block sizes.
 
 --
+### Run Time Graphs and Data
+
+<ins>Non-Logarithmic Scale<ins>
+
+![Scan P2](img/Scan_V1.png)
+
+<ins>Logarithmic Scale<ins>
 
 ![Scan Power of 2](img/Scan_Log_V1.png)
 
@@ -70,9 +81,68 @@ Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These end
 
 ![Compact P2 Table](img/CompactRuntimeValues_V1.png)
 
---- 
+--
+### Program Output
+
+```
+****************
+** SCAN TESTS **
+****************
+    [  32   0  23  12   8  47  34  34  22  42  24  10   8 ...   3   0 ]
+==== cpu scan, power-of-two ====
+   elapsed time: 7.0592ms    (std::chrono Measured)
+    [   0   0  23  35  43  90 124 158 180 222 246 256 264 ... 410816752 410816752 ]
+==== cpu scan, non-power-of-two ====
+   elapsed time: 7.416ms    (std::chrono Measured)
+    [   0   0  23  35  43  90 124 158 180 222 246 256 264 ... 410816646 410816680 ]
+    passed
+==== naive scan, power-of-two ====
+   elapsed time: 5.90557ms    (CUDA Measured)
+    passed
+==== naive scan, non-power-of-two ====
+   elapsed time: 5.7576ms    (CUDA Measured)
+    passed
+==== work-efficient scan, power-of-two ====
+   elapsed time: 2.72982ms    (CUDA Measured)
+    passed
+==== work-efficient scan, non-power-of-two ====
+   elapsed time: 2.55734ms    (CUDA Measured)
+    passed
+==== thrust scan, power-of-two ====
+   elapsed time: 1.64688ms    (CUDA Measured)
+    passed
+==== thrust scan, non-power-of-two ====
+   elapsed time: 0.847552ms    (CUDA Measured)
+    passed
+
+*****************************
+** STREAM COMPACTION TESTS **
+*****************************
+    [   3   0   3   2   3   0   3   3   3   2   2   0   1 ...   0   0 ]
+==== cpu compact without scan, power-of-two ====
+   elapsed time: 25.0897ms    (std::chrono Measured)
+    [   3   3   2   3   3   3   3   2   2   1   2   3   2 ...   1   3 ]
+    passed
+==== cpu compact without scan, non-power-of-two ====
+   elapsed time: 24.6968ms    (std::chrono Measured)
+    [   3   3   2   3   3   3   3   2   2   1   2   3   2 ...   2   1 ]
+    passed
+==== cpu compact with scan ====
+   elapsed time: 53.5246ms    (std::chrono Measured)
+    [   3   3   2   3   3   3   3   2   2   1   2   3   2 ...   1   3 ]
+    passed
+==== work-efficient compact, power-of-two ====
+   elapsed time: 0.598624ms    (CUDA Measured)
+    passed
+==== work-efficient compact, non-power-of-two ====
+   elapsed time: 0.587712ms    (CUDA Measured)
+    passed
+
+```
 
 ## Performance Analysis
+
+As can be seen in the graphs, as the size of our input increases, the CPU algorithms increas linearly as expected. This is because they are performing the operations sequencially and thus are directly dependent on the input size. However, we see that our GPU implementations tend to follow a less steep increase overall. This is particularly noticable in the first graph without the logarithmic data scalling. 
 
 ---
 ## References
