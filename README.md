@@ -89,7 +89,7 @@ Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These end
 
 ### Program Output
 
-This was run on an input size of $2^24$ and a non-power of 2 input size of $2^24 - 7$
+This was run on an input size of $2^{24}$ and a non-power of 2 input size of $2^{24} - 7$
 
 ```
 ****************
@@ -150,7 +150,7 @@ This was run on an input size of $2^24$ and a non-power of 2 input size of $2^24
 
 ## Performance Analysis
 
-As can be seen in the graphs, as the size of our input increases, we see the GPU algorithms performing better than the CPU implementations. This is because the CPU implementations are performing the operations sequencially and thus are directly dependent on the input size. However, we see that our GPU implementations tend to follow a less steep increase overall due to the tree structures we use. This is particularly noticable in the first graph without the logarithmic data scalling. Of course, as I mentiond before, for input sizes roughly $<= 2^20$ we still see the CPU implementation performing better. This is due to fixed costs on the GPU. For samll input sizes, each kernel launch has some latency, which means for our scan/compaction algorithms where we do O(log n) kernel passes, we loose some time. Additionally, with to few elements, the GPU cannot fill enough warps to hide memory latency. Meanwhile, the CPU’s simple loop runs have enough cach space with very low latency to run efficiently. Beyond ~2^20 elements these fixed costs are amortized, the GPU has enough elements to shine in parallel, and the tree-based parallel scans/compaction become better than the CPU.
+As can be seen in the graphs, as the size of our input increases, we see the GPU algorithms performing better than the CPU implementations. This is because the CPU implementations are performing the operations sequencially and thus are directly dependent on the input size. However, we see that our GPU implementations tend to follow a less steep increase overall due to the tree structures we use. This is particularly noticable in the first graph without the logarithmic data scalling. Of course, as I mentiond before, for input sizes roughly $<= 2^{20}$ we still see the CPU implementation performing better. This is due to fixed costs on the GPU. For samll input sizes, each kernel launch has some latency, which means for our scan/compaction algorithms where we do $O(log n)$ kernel passes, we loose some time. Additionally, with to few elements, the GPU cannot fill enough warps to hide memory latency. Meanwhile, the CPU’s simple loop runs have enough cach space with very low latency to run efficiently. Beyond $~2^{20}$ elements these fixed costs are amortized, the GPU has enough elements to shine in parallel, and the tree-based parallel scans/compaction become better than the CPU.
 
 ---
 ## References
