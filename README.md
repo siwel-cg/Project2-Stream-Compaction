@@ -20,13 +20,13 @@ This was implemented as a simple for loop which adds the current element with th
 
 <ins>Naive Parallel Scan<ins>
 
-If we expand out each sum in our sequenctial sum, we see that we can break down that entire thing into independent pairs of sums. Then, once again, we can break those down into pairs of sums, and so on untill finally we have just one value left. The result looks like a binary tree where at each level we do half the number of adds of the previous level. Note also that at each level, we have actually already completed a sum for some of the outputs. The advantage of doing things this way is that each individual sum in a layer doesn't rely on the others, and can thus be computed in parallel. In my implementation, since we are reading and writing to the same array, I used a ping-pong array system for the output to avoid any incorrect adds. Overall, we get $O(nlog_2(n))$ adds with an asymtotic time of $O(log_2(n))$. Note, although we are doing many more adds, since they can be done in parallel, for sufficiently large inputs and we will still see an improvement.
+If we expand out each sum in our sequenctial sum, we see that we can break down that entire thing into independent pairs of sums. Then, once again, we can break those down into pairs of sums, and so on untill finally we have just one value left. The result looks like a binary tree where at each level we do half the number of adds of the previous level. Note also that at each level, we have actually already completed a sum for some of the outputs. One additional precaution is that we need our input array to be a power of 2. This can easilly be handled by padding our array with identity elemets (0) to avoid changing the result while still ensuring these pairs can always be found. The advantage of doing things this way is that each individual sum in a layer doesn't rely on the others, and can thus be computed in parallel. In my implementation, since we are reading and writing to the same array, I used a ping-pong array system for the output to avoid any incorrect adds. Overall, we get $O(nlog_2(n))$ adds with an asymtotic time of $O(log_2(n))$. Note, although we are doing many more adds, since they can be done in parallel, for sufficiently large inputs and we will still see an improvement.
 
 ![Naive Scan](img/NaiveScan_V1.png)
 
 <ins>Work-Efficient Parallel Scan<ins>
 
-Although it might not be obvious at first we can actually cut out some of the addition operations as well as ordering our data in such a way that we don't need to ping-pong memory. The way we do this is through two passes on the array: Up Sweep nd Down Sweep. First is Up Sweep. Again, we take advantage of the associative property of our operation to split up add operations into a binary tree. However, rather than storing the sums into a new array, we store them back into the same array. Because of the ordering of the sums being completely disjoint, we don't run into the same problems as the naive implementation. The result of Up Sweep is not our completed scan, but it gets us half way in that we now have multiple sub sums we can reference in Down Sweep. In down sweep, we trace the tree down the opossite way. For the pairs in each level (Left and Right), we store Left+Right in Right's index and store Right in Left's index. By doing this down all the levels, we get a complete prefix sum array. It can be unintuative to see why this works, I would suggest looking at the pictures bellow and tracing out which indices and values go where.
+Although it might not be obvious at first we can actually cut out some of the addition operations as well as ordering our data in such a way that we don't need to ping-pong memory. The way we do this is through two passes on the array: Up Sweep nd Down Sweep. First is Up Sweep. Again, we take advantage of the associative property of our operation to split up add operations into a binary tree. However, rather than storing the sums into a new array, we store them back into the same array. Because of the ordering of the sums being completely disjoint, we don't run into the same problems as the naive implementation. The result of Up Sweep is not our completed scan, but it gets us half way in that we now have multiple sub sums we can reference in Down Sweep. In down sweep, we trace the tree down the opossite way. For the pairs in each level (Left and Right), we store Left+Right in Right's index and store Right in Left's index. By doing this down all the levels, we get a complete prefix sum array. It can be unintuative to see why this works, I would suggest looking at the pictures bellow and tracing out which indices and values go where. Once again, we need to pad our input array with identity elements if it is not a power of 2. 
 
 ![Up Sweep](img/UpSweeP_V1.png)
 
@@ -52,6 +52,23 @@ As mentioned earlier, with the Scan algorithm, and thus Stream Compaction aswell
 
 ---
 ## Results
+
+Below are the run time results across a varying size of inputs. Note 2^16 = 65536, 2^18 = 262144, 2^20 = 1048576, 2^22 = 4194304, 2^24 = 16777216, and 2^26 = 67108864. The block size for each algorith are as follows:
+Naive Scan: 128, Work-Efficient Scan: 64, Work-Efficient Compact: 256. These ended up being the best after comparing result times across various different block sizes. Note, for the graphs a log scale was used for better visibility.
+
+--
+
+![Scan Power of 2](img/Scan_Log_V1.png)
+
+![Scan P2 Table](img/ScanRuntimeValues_V1.png)
+
+![Scan Non-Power of 2](img/ScanNP2_log_V1.png)
+
+![Scan NP2 Table](img/ScanNp2Runtimes_V1.png)
+
+![Compact Power of 2](img/StreamCompact_Log_V1.png)
+
+![Compact P2 Table](img/CompactRuntimeValues_V1.png)
 
 --- 
 

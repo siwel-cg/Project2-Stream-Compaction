@@ -58,7 +58,7 @@ namespace StreamCompaction {
             cudaMemcpy(dev_idata, padded, size * sizeof(int), cudaMemcpyHostToDevice);
 
             timer().startGpuTimer();
-            int blockSize = 128;
+            int blockSize = 64;
             int gridSize = (size + blockSize - 1) / blockSize;
             int offset = 2;
 
@@ -133,7 +133,7 @@ namespace StreamCompaction {
 
             timer().startGpuTimer();
 
-            int blockSize = 64;
+            int blockSize = 256;
             int gridSize = (n + blockSize - 1) / blockSize;
             
             Common::kernMapToBoolean << <gridSize, blockSize >> > (n, dev_bool, dev_idata);

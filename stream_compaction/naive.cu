@@ -55,7 +55,7 @@ namespace StreamCompaction {
             cudaMemcpy(dev_idata1, padded, size * sizeof(int), cudaMemcpyHostToDevice);
 
             timer().startGpuTimer();
-            int blockSize = 64;
+            int blockSize = 128;
             int gridSize = (size + blockSize - 1) / blockSize;
             int npow2;
             for (int d = 0; d < pow2N; d++) {
